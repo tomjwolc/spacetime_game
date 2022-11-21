@@ -9,7 +9,7 @@ use r120::*;
 
 const TIMESTEP: f32 = 1.0 / 60.0;
 
-const SPEED_OF_LIGHT: f32 = 2000.0;
+const SPEED_OF_LIGHT: f32 = 3000.0;
 
 // Player consts
 const PLAYER_SIZE: f32 = 30.0;
@@ -49,11 +49,10 @@ fn main() {
         .add_system_set(
             SystemSet::new()
                 .with_run_criteria(FixedTimestep::step(TIMESTEP as f64))
-                .with_system(player_accelerate)
-                .with_system(reorient_angle_markers.after(player_accelerate))
-                .with_system(move_points.after(player_accelerate))
-                .with_system(reorient_points.after(move_points))
-                .with_system(move_dusties.after(player_accelerate))
+                .with_system(move_player)
+                .with_system(reorient_angle_markers.after(move_player))
+                .with_system(reorient_points.after(move_player))
+                .with_system(move_dusties.after(move_player))
         )
         .add_system(bevy::window::close_on_esc)
         .run()
@@ -64,9 +63,6 @@ struct Player;
 
 #[derive(Component)]
 struct AngleMarker;
-
-#[derive(Component)]
-struct CenterPoint;
 
 #[derive(Component)]
 struct Point;
@@ -95,15 +91,7 @@ fn setup(
         transform: Transform::from_translation(Vec3::new(0.0, 0.0, 2.0))
             .with_scale(Vec3::new(PLAYER_SIZE, PLAYER_SIZE, 0.0)),
         ..default()
-    }, Player, Velocity(Vec2::new(0.0, 0.0))));
-
-    commands.spawn((MaterialMesh2dBundle {
-        mesh: meshes.add(shape::Circle::default().into()).into(),
-        material: materials.add(ColorMaterial::from(Color::NONE)),
-        transform: Transform::from_translation(Vec3::new(0.0, 0.0, 0.0))
-            .with_scale(Vec3::new(0.0, 0.0, 0.0)),
-        ..default()
-    }, CenterPoint, Point, Position(Vec2::new(0.0, 0.0))));
+    }, Player, Position(Vec2::new(0.0, 0.0)), Velocity(Vec2::new(0.0, 0.0))));
 
     // spawns all of the angle markers
     for i in 0..NUM_ANGLE_MARKERS {
@@ -154,13 +142,12 @@ fn setup(
     }
 }
 
-fn player_accelerate(
+fn move_player(
     keyboard_input: Res<Input<KeyCode>>,
-    mut query_velocity: Query<&mut Velocity, With<Player>>,
-    query_center: Query<&Position, With<CenterPoint>>
+    mut query_player: Query<(&mut Position, &mut Velocity), With<Player>>
 ) {
-    let mut player_velocity = query_velocity.single_mut();
-    let center_pos = query_center.single();
+    // Acceleration changing velocity
+    let (mut player_position, mut player_velocity) = query_player.single_mut();
     let mut dx = 0.0;
     let mut dy = 0.0;
 
@@ -180,26 +167,27 @@ fn player_accelerate(
         dy -= PLAYER_ACCELERATION_Y * TIMESTEP;
     }
 
-    if dx == 0.0 && dy == 0.0 {
+    // Adds the friction if the player is pressing space
+    if keyboard_input.pressed(KeyCode::Space) {
         dx -= PLAYER_FRICTION * player_velocity.0.x;
         dy -= PLAYER_FRICTION * player_velocity.0.y;
     }
 
     // Boundry detection
-    if center_pos.0.x < LEFT_BOUND { 
-        dx += center_pos.0.x - LEFT_BOUND;
+    if player_position.0.x < LEFT_BOUND { 
+        dx -= player_position.0.x - LEFT_BOUND;
     }
 
-    if center_pos.0.x > RIGHT_BOUND {
-        dx += center_pos.0.x - RIGHT_BOUND;
+    if player_position.0.x > RIGHT_BOUND {
+        dx -= player_position.0.x - RIGHT_BOUND;
     }
 
-    if center_pos.0.y < LOWER_BOUND { 
-        dy += center_pos.0.y - LOWER_BOUND;
+    if player_position.0.y < LOWER_BOUND { 
+        dy -= player_position.0.y - LOWER_BOUND;
     }
 
-    if center_pos.0.y > UPPER_BOUND {
-        dy += center_pos.0.y - UPPER_BOUND;
+    if player_position.0.y > UPPER_BOUND {
+        dy -= player_position.0.y - UPPER_BOUND;
     }
 
     player_velocity.0.x += dx;
@@ -209,18 +197,10 @@ fn player_accelerate(
     if player_velocity.0.length() > PLAYER_MAX_SPEED {
         player_velocity.0 = PLAYER_MAX_SPEED * player_velocity.0.normalize();
     }
-}
 
-fn move_points(
-    query_velocity: Query<&Velocity, With<Player>>,
-    mut points_transforms: Query<&mut Position, With<Point>>
-) {
-    let player_velocity = query_velocity.single();
-
-    for mut pos in points_transforms.iter_mut() {
-        pos.0.x -= player_velocity.0.x * TIMESTEP;
-        pos.0.y -= player_velocity.0.y * TIMESTEP;
-    }
+    // Velocity change position
+    player_position.0.x += player_velocity.0.x * TIMESTEP;
+    player_position.0.y += player_velocity.0.y * TIMESTEP;
 }
 
 fn reorient_angle_markers(
@@ -257,10 +237,10 @@ fn reorient_angle_markers(
 }
 
 fn reorient_points(
-    query_velocity: Query<&Velocity, With<Player>>,
+    query_player: Query<(&Position, &Velocity), With<Player>>,
     mut points_transforms: Query<(&mut Transform, &Position), With<Point>>
 ) {
-    let player_velocity = query_velocity.single();
+    let (player_position, player_velocity) = query_player.single();
 
     if player_velocity.0.length() < 0.01 { return; }
 
@@ -275,8 +255,8 @@ fn reorient_points(
         // if !isOnscreen { continue; }
 
         let mut vector = R120::new(1.0, 1);
-        vector[2] = pos.x;
-        vector[3] = pos.y;
+        vector[2] = pos.x - player_position.0.x;
+        vector[3] = pos.y - player_position.0.y;
 
         vector = rotor * (vector * rotor.Reverse());
 
