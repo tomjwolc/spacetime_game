@@ -114,30 +114,18 @@ impl Path {
 
         let mut i = 0;
         let last = self.0.last().expect("Path was empty in Path::get_bounds_at_time");
-        let period = last.1 * SPEED_OF_LIGHT;
-        let num_periods = (((last.0 - player_position.0).length() + global_time) / period).floor();
-
-        println!("period: {}\nnum_periods: {}\n{} >= {}", period, num_periods, (self.0[0].0 - player_position.0).length() + global_time, self.0[0].1 * SPEED_OF_LIGHT + num_periods * period);
+        let offset = last.1 * SPEED_OF_LIGHT * (((last.0 - player_position.0).length() + global_time) / (last.1 * SPEED_OF_LIGHT)).floor();
 
         // get the index of the first rest stop that is above or on the light cone
-        while (self.0[i].0 - player_position.0).length() + global_time >= self.0[i].1 * SPEED_OF_LIGHT + num_periods * period {
+        while (self.0[i].0 - player_position.0).length() + global_time >= self.0[i].1 * SPEED_OF_LIGHT + offset {
             i += 1;
         };
 
         let prev_index = if i == 0 { self.0.len() - 1 } else { i - 1 };
-
-        println!(
-            "Lower_bound: {} > {}\nUpper_bound: {} < {}\n{}", 
-            (self.0[prev_index].0 - player_position.0).length() + global_time, 
-            self.0[prev_index].1 * SPEED_OF_LIGHT + num_periods * period,
-            (self.0[i].0 - player_position.0).length() + global_time, 
-            self.0[i].1 * SPEED_OF_LIGHT + num_periods * period,
-            if ((self.0[prev_index].0 - player_position.0).length() + global_time > if i == 0 { 0.0 } else { self.0[prev_index].1 * SPEED_OF_LIGHT } + num_periods * period) && ((self.0[i].0 - player_position.0).length() + global_time < self.0[i].1 * SPEED_OF_LIGHT + num_periods * period) { "" } else { "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" }
-        );
         
         (
-            (self.0[prev_index].0 - player_position.0, if i == 0 { 0.0 } else { self.0[prev_index].1 * SPEED_OF_LIGHT } + num_periods * period + global_time),
-            (self.0[i].0 - player_position.0, self.0[i].1 * SPEED_OF_LIGHT + num_periods * period + global_time)
+            (self.0[prev_index].0 - player_position.0, if i == 0 { 0.0 } else { self.0[prev_index].1 * SPEED_OF_LIGHT } + offset),
+            (self.0[i].0 - player_position.0, self.0[i].1 * SPEED_OF_LIGHT + offset)
         )
     }
 }
@@ -217,9 +205,13 @@ fn setup(
         transform: Transform::from_translation(Vec3::new(180.0, 50.0, 0.5)).with_scale(Vec3::new(10.0, 10.0, 0.0)),
         ..default()
     }, Path(vec![
-        (Vec2::new(100.0, 0.0), 1.0),
-        (Vec2::new(100.0, 100.0), 2.0),
-        (Vec2::new(180.0, 50.0), 3.0),
+        (Vec2::new(0.0, 0.0), 0.3),
+        (Vec2::new(100.0, 75.0), 0.6),
+        (Vec2::new(150.0, 0.0), 0.8),
+        (Vec2::new(100.0, -75.0), 1.0),
+        (Vec2::new(-100.0, 75.0), 1.5),
+        (Vec2::new(-150.0, 0.0), 1.7),
+        (Vec2::new(-100.0, -75.0), 1.9)
     ])));
 }
 
@@ -353,15 +345,12 @@ fn reorient_paths(
         
         let a: f32 = (bounds.1.0.x - bounds.0.0.x).powi(2) + (bounds.1.0.y - bounds.0.0.y).powi(2) - (bounds.1.1 - bounds.0.1).powi(2);
         let b: f32 = 2.0 * (bounds.0.0.x * (bounds.1.0.x - bounds.0.0.x) + bounds.0.0.y * (bounds.1.0.y - bounds.0.0.y) + (time - bounds.0.1) * (bounds.1.1 - bounds.0.1));
-        let c: f32 = bounds.0.0.x.powi(2) + bounds.0.0.y.powi(2) - bounds.0.1.powi(2) + 2.0 * bounds.0.1 * time + time.powi(2);
-        let mut p = (-b - (b.powi(2) - 4.0 * a * c).powf(0.5)) / (2.0 * a);
+        let c: f32 = bounds.0.0.x.powi(2) + bounds.0.0.y.powi(2) - bounds.0.1.powi(2) + 2.0 * bounds.0.1 * time - time.powi(2);
+        let mut p: f32 = (-b - (b.powi(2) - 4.0 * a * c).powf(0.5)) / (2.0 * a);
 
         if p < 0.0 || p > 1.0 {
-            println!("p was {}, but now is {}", p, (-b + (b.powi(2) - 4.0 * a * c).powf(0.5)) / (2.0 * a));
             p = (-b + (b.powi(2) - 4.0 * a * c).powf(0.5)) / (2.0 * a);
         }
-
-        println!("Is p correct? {} = {}", (bounds.0.0.x + p * (bounds.1.0.x - bounds.0.0.x)).powi(2) + (bounds.0.0.y + p * (bounds.1.0.y - bounds.0.0.y)).powi(2), (bounds.0.1 + p * (bounds.1.1 - bounds.0.1) - time).powi(2));
 
         let point: Vec2 = bounds.0.0 + p * (bounds.1.0 - bounds.0.0);
 
@@ -370,8 +359,6 @@ fn reorient_paths(
         vector[3] = point.y;
 
         vector = rotor * (vector * rotor.Reverse());
-
-        println!("\n\n{} > {}\n{} < {}\np = {}", bounds.0.0.length(), bounds.0.1, bounds.1.0.length(), bounds.1.1, p);
 
         transform.translation.x = vector[2];
         transform.translation.y = vector[3];
