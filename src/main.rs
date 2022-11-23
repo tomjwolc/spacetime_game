@@ -2,6 +2,7 @@ use std::vec;
 
 use bevy::{prelude::*, sprite::MaterialMesh2dBundle, time::FixedTimestep};
 use rand::prelude::*;
+use std::f32::consts::PI;
 
 mod r120;
 use r120::*;
@@ -94,7 +95,7 @@ struct AngleMarker;
 struct Point;
 
 // Assumption that there is always at least one element in vec
-#[derive(Component)]
+#[derive(Component, Debug)]
 struct Path(Vec<(Vec2, f32)>);
 
 #[derive(Component)]
@@ -109,6 +110,19 @@ struct Position(Vec2);
 // ----------------------------------<< Component methods >>----------------------------------
 
 impl Path {
+    fn from_paremetric_equation(min: f32, max: f32, total_time: f32, samples: usize, eq: fn(f32) -> Vec2) -> Self {
+        let mut path = Path(Vec::new());
+
+        for i in 0..(samples + 1) {
+            path.0.push((
+                eq((i as f32) * (max - min) / (samples as f32) + min),
+                (i as f32) * total_time / (samples as f32)
+            ));
+        }
+
+        path
+    }
+
     fn get_bounds_at_time(&self, player_position: &Position, mut global_time: f32) -> ((Vec2, f32), (Vec2, f32)) {
         global_time *= SPEED_OF_LIGHT; // turn time units to ct
 
@@ -202,17 +216,15 @@ fn setup(
     commands.spawn((MaterialMesh2dBundle {
         mesh: meshes.add(shape::Circle::default().into()).into(),
         material: materials.add(ColorMaterial::from(Color::CYAN)),
-        transform: Transform::from_translation(Vec3::new(180.0, 50.0, 0.5)).with_scale(Vec3::new(10.0, 10.0, 0.0)),
+        transform: Transform::from_scale(Vec3::new(10.0, 10.0, 0.0)),
         ..default()
-    }, Path(vec![
-        (Vec2::new(0.0, 0.0), 0.3),
-        (Vec2::new(100.0, 75.0), 0.6),
-        (Vec2::new(150.0, 0.0), 0.8),
-        (Vec2::new(100.0, -75.0), 1.0),
-        (Vec2::new(-100.0, 75.0), 1.5),
-        (Vec2::new(-150.0, 0.0), 1.7),
-        (Vec2::new(-100.0, -75.0), 1.9)
-    ])));
+    }, Path::from_paremetric_equation(
+        0.0, 
+        2.0 * PI, 
+        10.0, 
+        5, 
+        |t| Vec2::new(2000.0 * t.cos() + 100.0, 2000.0 * t.sin())
+    )));
 }
 
 fn move_player(
@@ -244,6 +256,11 @@ fn move_player(
 
     // Adds the friction if the player is pressing space
     if keyboard_input.pressed(KeyCode::Space) {
+        if player_velocity.0.length() < 10.0 {
+            player_velocity.0.x = 0.0;
+            player_velocity.0.y = 0.0;
+        }
+
         dx -= PLAYER_FRICTION * player_velocity.0.x;
         dy -= PLAYER_FRICTION * player_velocity.0.y;
     }
