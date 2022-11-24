@@ -1,5 +1,3 @@
-use std::vec;
-
 use bevy::{prelude::*, sprite::MaterialMesh2dBundle, time::FixedTimestep};
 use rand::prelude::*;
 use std::f32::consts::PI;
@@ -129,10 +127,10 @@ impl Path {
 
         let mut i = 0;
         let last = self.0.last().expect("Path was empty in Path::get_bounds_at_time");
-        let offset = last.1 * SPEED_OF_LIGHT * (((last.0 - player_position.0).length() + global_time) / (last.1 * SPEED_OF_LIGHT)).floor();
+        let offset = last.1 * SPEED_OF_LIGHT * ((-(last.0 - player_position.0).length() + global_time) / (last.1 * SPEED_OF_LIGHT)).floor();
 
         // get the index of the first rest stop that is above or on the light cone
-        while (self.0[i].0 - player_position.0).length() + global_time >= self.0[i].1 * SPEED_OF_LIGHT + offset {
+        while -(self.0[i].0 - player_position.0).length() + global_time >= self.0[i].1 * SPEED_OF_LIGHT + offset {
             i += 1;
         };
 
