@@ -65,19 +65,21 @@ fn reorient_paths(
     let global_time = query_global_time.0 * SPEED_OF_LIGHT;
 
     for (mut transform, path) in points_transforms.iter_mut() {
-        let bounds = path.get_bounds_at_time(player_position, query_global_time.0);
+        let bounds = path.get_bounds_at_time(player_position, query_global_time.0 as f64);
         
-        let a: f32 = (bounds.1.0.x - bounds.0.0.x).powi(2) + (bounds.1.0.y - bounds.0.0.y).powi(2) + (bounds.1.1 - bounds.0.1).powi(2);
-        let b: f32 = 2.0 * (bounds.0.0.x * (bounds.1.0.x - bounds.0.0.x) + bounds.0.0.y * (bounds.1.0.y - bounds.0.0.y) - (global_time - bounds.0.1) * (bounds.1.1 - bounds.0.1));
-        let c: f32 = bounds.0.0.x.powi(2) + bounds.0.0.y.powi(2) + bounds.0.1.powi(2) - 2.0 * bounds.0.1 * global_time + global_time.powi(2);
-        let p: f32 = (-b - (b.powi(2) - 4.0 * a * c).abs().powf(0.5)) / (2.0 * a);
+        let a: f64 = (bounds.1.0.x as f64 - bounds.0.0.x as f64).powi(2) + (bounds.1.0.y as f64 - bounds.0.0.y as f64).powi(2) + (bounds.1.1 - bounds.0.1).powi(2);
+        let b: f64 = 2.0 * (bounds.0.0.x as f64 * (bounds.1.0.x as f64 - bounds.0.0.x as f64) + bounds.0.0.y as f64 * (bounds.1.0.y as f64 - bounds.0.0.y as f64) - (global_time as f64 - bounds.0.1) * (bounds.1.1 - bounds.0.1));
+        let c: f64 = (bounds.0.0.x as f64).powi(2) + (bounds.0.0.y as f64).powi(2) + bounds.0.1.powi(2) - 2.0 * bounds.0.1 * global_time as f64 + (global_time as f64).powi(2);
+        let p: f64 = (-b - (b.powi(2) - 4.0 * a * c).abs().powf(0.5)) / (2.0 * a);
 
         // Small errors resulting in p being slightly out of bounds caused visual glitches
         // if p < 0.0 || p > 1.0 {
         //     p = (-b + (b.powi(2) - 4.0 * a * c).abs().powf(0.5)) / (2.0 * a);
         // }
 
-        let point: Vec2 = bounds.0.0 + p * (bounds.1.0 - bounds.0.0);
+        println!("p = {}", p);
+
+        let point: Vec2 = bounds.0.0 + p as f32 * (bounds.1.0 - bounds.0.0);
 
         let mut vector = R120::new(point.length(), 1);
         vector[2] = point.x;

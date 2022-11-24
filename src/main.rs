@@ -52,8 +52,8 @@ const TEST_POINTS_COLOR: Color = Color::rgb( 1.0, 1.0, 1.0 );
 fn main() {
     App::new()
         .insert_resource(ClearColor(Color::rgb_u8(20, 20, 40)))
-        .insert_resource(GlobalTime(0.0))
-        .insert_resource(LocalTime(0.0))
+        .insert_resource(GlobalTime(10000.0))
+        .insert_resource(LocalTime(10000.0))
         .add_plugin(ReorientPlugin)
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             window: WindowDescriptor {
@@ -67,7 +67,7 @@ fn main() {
             SystemSet::new()
                 .with_run_criteria(FixedTimestep::step(TIMESTEP as f64))
                 .with_system(move_player)
-                .with_system(debug_info.after(move_player))
+                // .with_system(debug_info.after(move_player))
                 .with_system(move_dusties.after(move_player))
         )
         .add_system(bevy::window::close_on_esc)
@@ -122,23 +122,28 @@ impl Path {
         path
     }
 
-    fn get_bounds_at_time(&self, player_position: &Position, mut global_time: f32) -> ((Vec2, f32), (Vec2, f32)) {
-        global_time *= SPEED_OF_LIGHT; // turn time units to ct
+    fn period(&self) -> f32 {
+        self.0.last().expect("period called on empty path").1 * SPEED_OF_LIGHT
+    }
+
+    fn get_bounds_at_time(&self, player_position: &Position, mut global_time: f64) -> ((Vec2, f64), (Vec2, f64)) {
+        global_time *= SPEED_OF_LIGHT as f64; // turn time units to ct
 
         let mut i = 0;
         let last = self.0.last().expect("Path was empty in Path::get_bounds_at_time");
-        let offset = last.1 * SPEED_OF_LIGHT * ((-(last.0 - player_position.0).length() + global_time) / (last.1 * SPEED_OF_LIGHT)).floor();
+        let offset = self.period() as f64 * ((-(last.0 - player_position.0).length() as f64 + global_time) / self.period() as f64).floor();
+        // global_time = global_time % period;
 
         // get the index of the first rest stop that is above or on the light cone
-        while -(self.0[i].0 - player_position.0).length() + global_time >= self.0[i].1 * SPEED_OF_LIGHT + offset {
+        while -(self.0[i].0 - player_position.0).length() as f64 + global_time >= self.0[i].1 as f64 * SPEED_OF_LIGHT as f64 + offset {
             i += 1;
         };
 
         let prev_index = if i == 0 { self.0.len() - 1 } else { i - 1 };
         
         (
-            (self.0[prev_index].0 - player_position.0, if i == 0 { 0.0 } else { self.0[prev_index].1 * SPEED_OF_LIGHT } + offset),
-            (self.0[i].0 - player_position.0, self.0[i].1 * SPEED_OF_LIGHT + offset)
+            (self.0[prev_index].0 - player_position.0, if i == 0 { 0.0 } else { self.0[prev_index].1 as f64 * SPEED_OF_LIGHT as f64 } + offset),
+            (self.0[i].0 - player_position.0, self.0[i].1 as f64 * SPEED_OF_LIGHT as f64 + offset)
         )
     }
 }
@@ -225,15 +230,15 @@ fn setup(
     )));
 
     // spawns the path
-    // commands.spawn((MaterialMesh2dBundle {
-    //     mesh: meshes.add(shape::Circle::default().into()).into(),
-    //     material: materials.add(ColorMaterial::from(Color::CYAN)),
-    //     transform: Transform::from_scale(Vec3::new(10.0, 10.0, 0.0)),
-    //     ..default()
-    // }, Path(vec![
-    //     (Vec2::new(-1000.0, 0.0), 1.01),
-    //     (Vec2::new(1000.0, 0.0), 2.02)
-    // ])));
+    commands.spawn((MaterialMesh2dBundle {
+        mesh: meshes.add(shape::Circle::default().into()).into(),
+        material: materials.add(ColorMaterial::from(Color::CYAN)),
+        transform: Transform::from_scale(Vec3::new(10.0, 10.0, 0.0)),
+        ..default()
+    }, Path(vec![
+        (Vec2::new(-100.0, -100.0), 5.00),
+        (Vec2::new(100.0, -100.0), 10.00)
+    ])));
 
     // spawns the clock
     commands.spawn((MaterialMesh2dBundle {
@@ -300,7 +305,7 @@ fn move_player(
 
     // Adds the friction if the player is pressing space
     if keyboard_input.pressed(KeyCode::Space) {
-        if player_velocity.0.length() < PLAYER_MAX_SPEED / 100.0 {
+        if player_velocity.0.length() < PLAYER_MAX_SPEED / 1000.0 {
             player_velocity.0.x = 0.0;
             player_velocity.0.y = 0.0;
         }
