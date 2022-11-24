@@ -44,7 +44,7 @@ fn reorient_points(
     let rotor = velocity_to_rotor(player_velocity);
 
     for (mut transform, Position(pos)) in points_transforms.iter_mut() {
-        let mut vector = R120::new(((pos.x - player_position.0.x).powi(2) + (pos.y - player_position.0.y).powi(2)).powf(0.5), 1);
+        let mut vector = R120::new(-((pos.x - player_position.0.x).powi(2) + (pos.y - player_position.0.y).powi(2)).powf(0.5), 1);
         vector[2] = pos.x - player_position.0.x;
         vector[3] = pos.y - player_position.0.y;
 
@@ -77,11 +77,9 @@ fn reorient_paths(
         //     p = (-b + (b.powi(2) - 4.0 * a * c).abs().powf(0.5)) / (2.0 * a);
         // }
 
-        println!("p = {}", p);
-
         let point: Vec2 = bounds.0.0 + p as f32 * (bounds.1.0 - bounds.0.0);
 
-        let mut vector = R120::new(point.length(), 1);
+        let mut vector = R120::new(-point.length(), 1);
         vector[2] = point.x;
         vector[3] = point.y;
 

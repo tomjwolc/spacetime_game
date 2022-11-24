@@ -15,16 +15,17 @@ use reorient::ReorientPlugin;
 
 const TIMESTEP: f32 = 1.0 / 60.0;
 
-const SPEED_OF_LIGHT: f32 = 2000.0;
+const SPEED_OF_LIGHT: f32 = 4000.0;
 
 // Player consts
 const PLAYER_SIZE: f32 = 30.0;
 const PLAYER_COLOR: Color = Color::rgb(255.0 / 256.0, 195.0 / 256.0, 0.0 / 256.0 );
 
-const PLAYER_MAX_SPEED: f32 = 1990.0;
+const PLAYER_MAX_SPEED: f32 = 2000.0;
 const PLAYER_ACCELERATION_X: f32 = PLAYER_MAX_SPEED;
 const PLAYER_ACCELERATION_Y: f32 = PLAYER_MAX_SPEED;
-const PLAYER_FRICTION: f32 = 0.05; // Only when not accelerating
+const PLAYER_BRAKING: f32 = 0.05; // Only when not accelerating
+const PLAYER_FRICTION: f32 = 0.005; // Only when not accelerating
 
 const LEFT_BOUND: f32 = -20000.0;
 const UPPER_BOUND: f32 = 20000.0;
@@ -32,7 +33,7 @@ const RIGHT_BOUND: f32 = 20000.0;
 const LOWER_BOUND: f32 = -20000.0;
 
 // Angle Marker consts
-const NUM_ANGLE_MARKERS: usize = 23;
+const NUM_ANGLE_MARKERS: usize = 0;
 const ANGLE_MARKER_SIZE: f32 = 10.0;
 const ANGLE_MARKER_COLOR: Color = Color::rgb(255.0 / 256.0, 87.0 / 256.0, 51.0 / 256.0 );
 const ORBIT_RADIUS: f32 = 100.0;
@@ -42,18 +43,18 @@ const NUM_DUSTIES: usize = 200;
 const DUSTIES_SIZE_RANGE: std::ops::Range<f32> = 1.0..4.5;
 const DUSTIES_COLOR: Color = Color::rgb(80.0 / 256.0, 80.0 / 256.0, 100.0 / 256.0 );
 
-// Test points
-const NUM_TEST_POINTS: usize = 300;
-const TEST_POINTS_SIZE: f32 = 7.5;
-const TEST_POINTS_COLOR: Color = Color::rgb( 1.0, 1.0, 1.0 );
+// Render depths
+const POINT_RENDER_DEPTH: f32 = 2.0;
+const PLAYER_RENDER_DEPTH: f32 = 6.0;
+const PATH_RENDER_DEPTH: f32 = 4.0;
 
 // ----------------------------------<< Startup >>----------------------------------
 
 fn main() {
     App::new()
         .insert_resource(ClearColor(Color::rgb_u8(20, 20, 40)))
-        .insert_resource(GlobalTime(10000.0))
-        .insert_resource(LocalTime(10000.0))
+        .insert_resource(GlobalTime(0.0))
+        .insert_resource(LocalTime(0.0))
         .add_plugin(ReorientPlugin)
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             window: WindowDescriptor {
@@ -63,11 +64,12 @@ fn main() {
             ..default()
         }))
         .add_startup_system(setup)
+        .add_startup_system(setup_render_depths.after(setup))
         .add_system_set(
             SystemSet::new()
                 .with_run_criteria(FixedTimestep::step(TIMESTEP as f64))
                 .with_system(move_player)
-                // .with_system(debug_info.after(move_player))
+                .with_system(debug_info.after(move_player))
                 .with_system(move_dusties.after(move_player))
         )
         .add_system(bevy::window::close_on_esc)
@@ -162,7 +164,7 @@ fn setup(
     commands.spawn((MaterialMesh2dBundle {
         mesh: meshes.add(shape::Circle::default().into()).into(),
         material: materials.add(ColorMaterial::from(PLAYER_COLOR)),
-        transform: Transform::from_translation(Vec3::new(0.0, 0.0, 2.0))
+        transform: Transform::from_translation(Vec3::new(0.0, 0.0, PLAYER_RENDER_DEPTH))
             .with_scale(Vec3::new(PLAYER_SIZE, PLAYER_SIZE, 0.0)),
         ..default()
     }, Player, Position(Vec2::new(0.0, 0.0)), Velocity(Vec2::new(0.0, 0.0))));
@@ -201,45 +203,6 @@ fn setup(
         }, Dusty));
     }
 
-    // spawns all of the test points
-    for _ in 0..NUM_TEST_POINTS {
-        let dist_x = rng.gen_range(LEFT_BOUND..RIGHT_BOUND);
-        let dist_y = rng.gen_range(LOWER_BOUND..UPPER_BOUND);
-
-        commands.spawn((MaterialMesh2dBundle {
-            mesh: meshes.add(shape::Circle::default().into()).into(),
-            material: materials.add(ColorMaterial::from(TEST_POINTS_COLOR)),
-            transform: Transform::from_translation(Vec3::new(dist_x, dist_y, 0.0))
-                .with_scale(Vec3::new(TEST_POINTS_SIZE, TEST_POINTS_SIZE, 0.0)),
-            ..default()
-        }, Point, Position(Vec2::new(dist_x, dist_y))));
-    }
-
-    // spawns the path
-    commands.spawn((MaterialMesh2dBundle {
-        mesh: meshes.add(shape::Circle::default().into()).into(),
-        material: materials.add(ColorMaterial::from(Color::CYAN)),
-        transform: Transform::from_scale(Vec3::new(10.0, 10.0, 0.0)),
-        ..default()
-    }, Path::from_paremetric_equation(
-        0.0, 
-        2.0 * PI, 
-        10.0, 
-        40, 
-        |t| Vec2::new(200.0 * t.cos(), 50.0 * (2.0 * t).sin() + 100.0)
-    )));
-
-    // spawns the path
-    commands.spawn((MaterialMesh2dBundle {
-        mesh: meshes.add(shape::Circle::default().into()).into(),
-        material: materials.add(ColorMaterial::from(Color::CYAN)),
-        transform: Transform::from_scale(Vec3::new(10.0, 10.0, 0.0)),
-        ..default()
-    }, Path(vec![
-        (Vec2::new(-100.0, -100.0), 5.00),
-        (Vec2::new(100.0, -100.0), 10.00)
-    ])));
-
     // spawns the clock
     commands.spawn((MaterialMesh2dBundle {
         mesh: meshes.add(shape::Circle::default().into()).into(),
@@ -269,10 +232,42 @@ fn setup(
     
     commands.spawn((MaterialMesh2dBundle {
         mesh: meshes.add(shape::Circle::default().into()).into(),
+        material: materials.add(ColorMaterial::from(Color::YELLOW)),
+        transform: Transform::from_scale(Vec3::new(10.0, 10.0, 0.0)),
+        ..default()
+    }, Path::from_paremetric_equation(
+        0.0, 
+        2.0 * PI, 
+        24.0 * 60.0 * 60.0, 
+        40, 
+        |t| Vec2::new(100.0 * t.cos(), 100.0 * t.sin())
+    )));
+    
+    commands.spawn((MaterialMesh2dBundle {
+        mesh: meshes.add(shape::Circle::default().into()).into(),
         material: materials.add(ColorMaterial::from(Color::WHITE)),
         transform: Transform::from_scale(Vec3::new(20.0, 20.0, 0.0)),
         ..default()
     }, Point, Position(Vec2::new(0.0, 0.0))));
+}
+
+fn setup_render_depths(
+    mut query_points: Query<(&mut Transform, &Position), With<Point>>,
+    mut query_paths: Query<&mut Transform, (With<Path>, Without<Point>)>
+) {
+    let mut rng = thread_rng();
+
+    for (mut transform, Position(position)) in query_points.iter_mut() {
+        transform.translation.x = position.x;
+        transform.translation.y = position.y;
+        transform.translation.z = POINT_RENDER_DEPTH + rng.gen_range(-0.001..0.001);
+    }
+
+    for mut transform in query_paths.iter_mut() {
+        transform.translation.x = std::f32::MAX;
+        transform.translation.y = std::f32::MAX;
+        transform.translation.z = PATH_RENDER_DEPTH + rng.gen_range(-0.001..0.001);
+    }
 }
 
 fn move_player(
@@ -310,6 +305,9 @@ fn move_player(
             player_velocity.0.y = 0.0;
         }
 
+        dx -= PLAYER_BRAKING * player_velocity.0.x;
+        dy -= PLAYER_BRAKING * player_velocity.0.y;
+    } else if dx == 0.0 && dy == 0.0 {
         dx -= PLAYER_FRICTION * player_velocity.0.x;
         dy -= PLAYER_FRICTION * player_velocity.0.y;
     }
